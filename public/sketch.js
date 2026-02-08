@@ -9,6 +9,7 @@ function setup() {
   angleMode(DEGREES);
   angle = 360 / symmetry;
 
+  socket = io();
   // 【重要】监听服务器广播回来的窗花数据
   socket.on("showOnWall", (data) => {
     allShapes.push(data);
