@@ -2,15 +2,19 @@ let currentShape = [];
 let allShapes = [];    
 let symmetry = 8;      
 let angle;
-const socket = io(); // 连接服务器
+
+// 【修改1】这里只声明变量，千万不要在这里赋值 io()
+let socket; 
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
   angle = 360 / symmetry;
 
+  // 【修改2】在 setup 里面才进行连接，这样最安全
   socket = io();
-  // 【重要】监听服务器广播回来的窗花数据
+
+  // 监听别人画的窗花
   socket.on("showOnWall", (data) => {
     allShapes.push(data);
   });
@@ -19,26 +23,26 @@ function setup() {
 function draw() {
   background(240);
   
-  // 画个圆点提示中心
+  // 中心点
   fill(200);
   noStroke();
   ellipse(width/2, height/2, 10, 10);
 
   translate(width/2, height/2); 
 
-  // 1. 记录当前绘画
+  // 1. 记录轨迹
   if (mouseIsPressed) {
     let mx = mouseX - width/2;
     let my = mouseY - height/2;
     currentShape.push({x: mx, y: my});
   }
 
-  // 2. 绘制墙上所有的窗花
+  // 2. 画出所有的窗花
   for (let s of allShapes) {
     drawSymmetry(s.points, s.color);
   }
 
-  // 3. 实时绘制自己正在画的预览（红色）
+  // 3. 画当前的红色预览
   drawSymmetry(currentShape, [255, 0, 0]); 
 }
 
@@ -68,16 +72,18 @@ function mouseReleased() {
     let start = currentShape[0];
     let end = currentShape[currentShape.length - 1];
     
-    // 如果闭合了
     if (dist(start.x, start.y, end.x, end.y) < 30) {
       let papercutData = {
-        points: currentShape,
-        color: [random(255), 50, 50] // 随机红色
+        points: [...currentShape], 
+        color: [random(255), 50, 50] 
       };
       
-      // 【关键】发送给服务器
+      // 发送给服务器
       socket.emit("newPapercut", papercutData);
+      
+      // 【修改3】把自己画的也存进数组，这样你自己不用刷新也能看到
+      allShapes.push(papercutData); 
     }
   }
-  currentShape = []; // 清空当前，等待下一次绘制
+  currentShape = []; 
 }
