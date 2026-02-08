@@ -2,35 +2,48 @@ import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 
-
 const app = express();
-const server = http.createServer(app);//socket.io needs an http server
+const server = http.createServer(app);
 const io = new Server(server);
 const port = process.env.PORT || 4000;
 
-//Tell our Node.js Server to host our P5.JS sketch from the public folder
 app.use(express.static("public"));
 
-// Setup Our Node.js server to listen to connections
+// [Storage] Array to store all papercut history
+let papercutHistory = [];
+
 server.listen(port, () => {
-  console.log("listening on: "+port);
+  console.log("listening on: " + port);
 });
 
-// Callback function for when our P5.JS sketch connects 
 io.on("connection", (socket) => {
-  console.log("a user connected");
+  console.log("a user connected: " + socket.id);
 
-  // Code to run every time we get a message from front-end P5.JS
+  // [History] Send existing history to the new user immediately
+  socket.emit("history", papercutHistory);
 
+  // [Receive] When a user sends a new papercut
   socket.on("newPapercut", (data) => {
-    console.log(data);
+    // 1. Add to history storage
+    papercutHistory.push(data);
     
-    //broadcast.emit means send to everyone but the sender
-    socket.broadcast.emit('showOnWall', data);
+    // 2. Limit history size to 100 to prevent server overload
+    if (papercutHistory.length > 100) {
+      papercutHistory.shift(); // Remove the oldest one
+    }
 
+    // 3. Broadcast to everyone else
+    socket.broadcast.emit('showOnWall', data);
+  });
+
+  // [Delete] When a user wants to delete a specific papercut
+  socket.on("deletePapercut", (idToDelete) => {
+    console.log("Request to delete ID:", idToDelete);
+    
+    // 1. Remove it from server storage
+    papercutHistory = papercutHistory.filter(item => item.id !== idToDelete);
+    
+    // 2. Tell everyone to remove it from their screen
+    io.emit('removePapercut', idToDelete);
   });
 });
-
-
-
-
