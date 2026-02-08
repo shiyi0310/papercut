@@ -1,9 +1,8 @@
+// Global variables declaration
 let currentShape = []; 
 let allShapes = [];    
 let symmetry = 8;      
 let angle;
-
-// 【修改1】这里只声明变量，千万不要在这里赋值 io()
 let socket; 
 
 function setup() {
@@ -11,41 +10,72 @@ function setup() {
   angleMode(DEGREES);
   angle = 360 / symmetry;
 
-  // 【修改2】在 setup 里面才进行连接，这样最安全
-  socket = io();
+  try {
+    // [Important] Initialize connection here to avoid load errors
+    socket = io();
+    console.log("Attempting to connect to server...");
 
-  // 监听别人画的窗花
-  socket.on("showOnWall", (data) => {
-    allShapes.push(data);
-  });
+    // Listen for artwork received from other users
+    socket.on("showOnWall", (data) => {
+      allShapes.push(data);
+    });
+
+    // Log successful connection
+    socket.on("connect", () => {
+      console.log(">>> Connected! ID:", socket.id);
+    });
+
+  } catch (e) {
+    console.log("Socket error:", e);
+  }
 }
 
 function draw() {
-  background(240);
+  // Set background: Warm white if connected, Grey if disconnected
+  if (socket && socket.connected) {
+    background(250, 240, 230); 
+  } else {
+    background(200); 
+  }
   
-  // 中心点
-  fill(200);
+  // --- Step 1: Draw existing artwork on the "Wall" ---
+  for (let s of allShapes) {
+    push(); // [Important] Save current coordinate system
+    
+    // Move to the specific random position of this papercut
+    translate(s.x, s.y); 
+    
+    // Scale down existing papercuts (0.5x) for better aesthetics
+    scale(0.5); 
+    
+    drawSymmetry(s.points, s.color);
+    
+    pop(); // [Important] Restore coordinate system for the next shape
+  }
+
+  // --- Step 2: Draw the "Workbench" in the center ---
+  push();
+  translate(width/2, height/2); // Move origin to screen center
+  
+  // Draw center indicator
+  fill(150);
   noStroke();
-  ellipse(width/2, height/2, 10, 10);
+  ellipse(0, 0, 10, 10); 
 
-  translate(width/2, height/2); 
-
-  // 1. 记录轨迹
+  // 1. Record current drawing trajectory
   if (mouseIsPressed) {
-    let mx = mouseX - width/2;
+    let mx = mouseX - width/2; // Calculate coordinates relative to center
     let my = mouseY - height/2;
     currentShape.push({x: mx, y: my});
   }
 
-  // 2. 画出所有的窗花
-  for (let s of allShapes) {
-    drawSymmetry(s.points, s.color);
-  }
-
-  // 3. 画当前的红色预览
+  // 2. Draw the line currently being drawn (Red preview)
   drawSymmetry(currentShape, [255, 0, 0]); 
+  
+  pop(); // End center drawing context
 }
 
+// Generic function to draw symmetrical shapes
 function drawSymmetry(points, col) {
   if (points.length < 2) return;
   stroke(col);
@@ -68,22 +98,39 @@ function drawSymmetry(points, col) {
 }
 
 function mouseReleased() {
+  // Only process if there are enough points
   if (currentShape.length > 5) {
     let start = currentShape[0];
     let end = currentShape[currentShape.length - 1];
     
+    // Check if the shape is closed (start and end points are close)
     if (dist(start.x, start.y, end.x, end.y) < 30) {
+      
+      // Generate a random position within screen bounds
+      let randomX = random(width * 0.1, width * 0.9);
+      let randomY = random(height * 0.1, height * 0.9);
+
       let papercutData = {
         points: [...currentShape], 
-        color: [random(255), 50, 50] 
+        color: [random(255), 100, 100], // Random reddish color
+        x: randomX, // [New] Store specific X position
+        y: randomY  // [New] Store specific Y position
       };
       
-      // 发送给服务器
-      socket.emit("newPapercut", papercutData);
+      // Send data to server
+      if (socket) {
+        socket.emit("newPapercut", papercutData);
+      }
       
-      // 【修改3】把自己画的也存进数组，这样你自己不用刷新也能看到
+      // Immediately add to local display
       allShapes.push(papercutData); 
     }
   }
+  // Clear the workbench for the next drawing
   currentShape = []; 
+}
+
+// Resize canvas when window size changes
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
