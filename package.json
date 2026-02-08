@@ -1,0 +1,17 @@
+{
+  "name": "paper_cut_2026_02_08",
+  "version": "1.0.0",
+  "description": "Networked Papercut Project",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
