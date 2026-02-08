@@ -4,23 +4,30 @@ let allShapes = [];
 let symmetry = 8;      
 let angle;
 let socket; 
+let myName = "Guest"; 
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
   angle = 360 / symmetry;
 
-  try {
-    // [Important] Initialize connection here to avoid load errors
-    socket = io();
-    console.log("Attempting to connect to server...");
+  // Ask for name
+  myName = prompt("Please enter your name:", "Guest" + int(random(1000)));
+  if (!myName) myName = "Anonymous";
 
-    // Listen for artwork received from other users
+  try {
+    socket = io();
+    console.log("Attempting to connect...");
+
     socket.on("showOnWall", (data) => {
       allShapes.push(data);
     });
+    
+    // Listen for history (if server supports it)
+    socket.on("history", (historyData) => {
+        allShapes = [...allShapes, ...historyData];
+    });
 
-    // Log successful connection
     socket.on("connect", () => {
       console.log(">>> Connected! ID:", socket.id);
     });
@@ -31,7 +38,7 @@ function setup() {
 }
 
 function draw() {
-  // Set background: Warm white if connected, Grey if disconnected
+  // Background
   if (socket && socket.connected) {
     background(250, 240, 230); 
   } else {
@@ -40,47 +47,68 @@ function draw() {
   
   // --- Step 1: Draw existing artwork on the "Wall" ---
   for (let s of allShapes) {
-    push(); // [Important] Save current coordinate system
+    push(); 
     
-    // Move to the specific random position of this papercut
+    // 1. Move to position
     translate(s.x, s.y); 
     
-    // Scale down existing papercuts (0.5x) for better aesthetics
+    // 2. [New] Apply random rotation (Tilt the papercut)
+    rotate(s.rotation); 
+    
+    // 3. Scale down
     scale(0.5); 
     
+    // 4. Draw the shape
     drawSymmetry(s.points, s.color);
     
-    pop(); // [Important] Restore coordinate system for the next shape
+    // 5. [Trick] Draw Name (Keep it horizontal!)
+    // We rotate BACK so the text is always straight, even if the papercut is tilted
+    rotate(-s.rotation); 
+    
+    fill(0);
+    noStroke();
+    textAlign(CENTER);
+    textSize(24); 
+    // Adjust Y position slightly because rotation might have moved it
+    text(s.author, 0, 120); 
+    
+    pop(); 
   }
 
-  // --- Step 2: Draw the "Workbench" in the center ---
+  // --- Step 2: Draw the "Workbench" ---
   push();
-  translate(width/2, height/2); // Move origin to screen center
+  translate(width/2, height/2); 
   
-  // Draw center indicator
   fill(150);
   noStroke();
   ellipse(0, 0, 10, 10); 
+  
+  textAlign(CENTER);
+  text(myName, 0, 160); 
 
-  // 1. Record current drawing trajectory
   if (mouseIsPressed) {
-    let mx = mouseX - width/2; // Calculate coordinates relative to center
+    let mx = mouseX - width/2; 
     let my = mouseY - height/2;
     currentShape.push({x: mx, y: my});
   }
 
-  // 2. Draw the line currently being drawn (Red preview)
   drawSymmetry(currentShape, [255, 0, 0]); 
   
-  pop(); // End center drawing context
+  pop(); 
 }
 
-// Generic function to draw symmetrical shapes
 function drawSymmetry(points, col) {
   if (points.length < 2) return;
+  
   stroke(col);
   strokeWeight(2);
-  noFill();
+  
+  // [Design Tip] Add some transparency (Alpha) to fill
+  // This makes overlapping look nice instead of messy
+  let c = color(col);
+  c.setAlpha(50); // Very transparent fill
+  fill(c); 
+  // If you want outline only, use noFill() and remove the lines above
 
   for (let i = 0; i < symmetry; i++) {
     rotate(angle);
@@ -98,39 +126,38 @@ function drawSymmetry(points, col) {
 }
 
 function mouseReleased() {
-  // Only process if there are enough points
   if (currentShape.length > 5) {
     let start = currentShape[0];
     let end = currentShape[currentShape.length - 1];
     
-    // Check if the shape is closed (start and end points are close)
     if (dist(start.x, start.y, end.x, end.y) < 30) {
       
-      // Generate a random position within screen bounds
       let randomX = random(width * 0.1, width * 0.9);
       let randomY = random(height * 0.1, height * 0.9);
+      
+      // [New] Random rotation angle (between -45 and 45 degrees)
+      // This gives a "natural scattered" look without being too chaotic
+      let randomRot = random(-45, 45);
 
       let papercutData = {
         points: [...currentShape], 
-        color: [random(255), 100, 100], // Random reddish color
-        x: randomX, // [New] Store specific X position
-        y: randomY  // [New] Store specific Y position
+        color: [random(255), 100, 100], 
+        x: randomX, 
+        y: randomY,
+        rotation: randomRot, // Save the rotation
+        author: myName 
       };
       
-      // Send data to server
       if (socket) {
         socket.emit("newPapercut", papercutData);
       }
       
-      // Immediately add to local display
       allShapes.push(papercutData); 
     }
   }
-  // Clear the workbench for the next drawing
   currentShape = []; 
 }
 
-// Resize canvas when window size changes
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
