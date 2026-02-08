@@ -1,6 +1,4 @@
-// -----------------------------
 // Global variables
-// -----------------------------
 let currentShape = []; 
 let allShapes = [];    
 let symmetry = 8;      
@@ -14,68 +12,67 @@ function setup() {
 
   try {
     socket = io();
-    console.log("Attempting to connect to server...");
+    console.log("Connecting...");
 
-    // Receive a newly created papercut from other users
+    // 1. Listen for new artwork from others
     socket.on("showOnWall", (data) => {
-      // Assign random animation parameters for visual liveliness
-      data.spinSpeed = random(-0.5, 0.5); 
-      data.floatOffset = random(360); 
+      // Add animation parameters locally
+      addAnimParams(data); 
       allShapes.push(data);
     });
     
-    // Receive historical papercuts when entering the space
+    // 2. [New] Listen for history when joining
     socket.on("history", (historyData) => {
-      historyData.forEach(d => {
-        d.spinSpeed = random(-0.5, 0.5);
-        d.floatOffset = random(360);
-      });
-      allShapes = [...allShapes, ...historyData];
+        // Add animation parameters to all history items
+        historyData.forEach(d => addAnimParams(d));
+        allShapes = [...historyData]; 
+    });
+
+    // 3. [New] Listen for delete commands
+    socket.on("removePapercut", (idToRemove) => {
+        // Remove the shape with the matching ID
+        allShapes = allShapes.filter(s => s.id !== idToRemove);
     });
 
   } catch (e) {
-    console.log("Socket connection error:", e);
+    console.log("Socket error:", e);
   }
 }
 
+// Helper: Add random animation values if they are missing
+function addAnimParams(data) {
+    if (!data.spinSpeed) data.spinSpeed = random(-0.5, 0.5);
+    if (!data.floatOffset) data.floatOffset = random(360);
+}
+
 function draw() {
-  // -----------------------------
-  // Background feedback
-  // -----------------------------
+  // Set background color based on connection status
   if (socket && socket.connected) {
-    background(250, 240, 230); // Connected state
+    background(250, 240, 230); // Warm white
   } else {
-    background(200); // Disconnected / offline state
+    background(200); // Grey
   }
   
-  // -----------------------------
-  // Title & Instruction (UI Layer)
-  // -----------------------------
+  // --- Draw Title ---
   push();
-  resetMatrix(); // Ensure UI text is not affected by transforms
+  resetMatrix(); 
   fill(100);
   noStroke();
   textAlign(CENTER);
   textSize(20);
   textStyle(BOLD);
-  text(
-    "Cut your papercut — draw a closed shape to place it on the wall",
-    width / 2,
-    50
-  );
+  text("Cut your papercut! Click existing ones to DELETE.", width/2, 50);
   pop();
 
-  // -----------------------------
-  // Shared Wall: existing papercuts
-  // -----------------------------
+  // --- Step 1: Draw Wall Papercuts ---
   for (let s of allShapes) {
     push(); 
-
-    // Floating motion
+    
+    // Calculate floating animation
     let floatingY = sin(frameCount + s.floatOffset) * 10; 
     translate(s.x, s.y + floatingY); 
     
-    // Rotation animation
+    // Calculate rotation animation
     let currentRotation = s.rotation + (frameCount * s.spinSpeed);
     rotate(currentRotation); 
     
@@ -84,44 +81,43 @@ function draw() {
     pop(); 
   }
 
-  // -----------------------------
-  // Workbench (drawing area)
-  // -----------------------------
+  // --- Step 2: Draw Workbench (Center) ---
   push();
-  translate(width / 2, height / 2); 
+  translate(width/2, height/2); 
   
-  // Center reference point
   fill(150);
   noStroke();
-  ellipse(0, 0, 10, 10); 
+  ellipse(0, 0, 10, 10); // Center dot
 
-  // Record current drawing gesture
-  if (mouseIsPressed) {
-    let mx = mouseX - width / 2; 
-    let my = mouseY - height / 2;
-    currentShape.push({ x: mx, y: my });
+  // Handle Input (Mouse or Touch)
+  // Only add points if we are actually dragging (drawing)
+  if (mouseIsPressed || touches.length > 0) {
+    let mx = mouseX - width/2; 
+    let my = mouseY - height/2;
+    
+    // Avoid adding duplicate points
+    if (currentShape.length === 0 || dist(mx, my, currentShape[currentShape.length-1].x, currentShape[currentShape.length-1].y) > 2) {
+       currentShape.push({x: mx, y: my});
+    }
   }
 
-  // Live preview of the current cut (red)
+  // Draw the red preview line
   drawSymmetry(currentShape, [255, 0, 0]); 
   
-  // Visual hint: show a green cue when the shape is close to closing
+  // Visual Hint: Green light when close to closing the shape
   if (currentShape.length > 5) {
-    let start = currentShape[0];
-    let end = currentShape[currentShape.length - 1];
-    if (dist(start.x, start.y, end.x, end.y) < 100) {
-      fill(0, 255, 0, 100); // Semi-transparent green
-      noStroke();
-      ellipse(start.x, start.y, 20, 20); // "You can release now" indicator
-    }
+      let start = currentShape[0];
+      let end = currentShape[currentShape.length - 1];
+      if (dist(start.x, start.y, end.x, end.y) < 100) {
+          fill(0, 255, 0, 100); 
+          noStroke();
+          ellipse(start.x, start.y, 20, 20); 
+      }
   }
   
   pop(); 
 }
 
-// -----------------------------
-// Symmetry drawing function
-// -----------------------------
 function drawSymmetry(points, col) {
   if (points.length < 2) return;
   
@@ -129,63 +125,98 @@ function drawSymmetry(points, col) {
   strokeWeight(2);
   
   let c = color(col);
-  c.setAlpha(50); 
+  c.setAlpha(50); // Transparent fill
   fill(c); 
 
   for (let i = 0; i < symmetry; i++) {
     rotate(angle);
-
     beginShape();
-    for (let p of points) vertex(p.x, p.y);
-
-    // Force visual closure for completed papercuts
-    if (col[0] !== 255) endShape(CLOSE); 
-    else endShape();
+    for (let p of points) { vertex(p.x, p.y); }
+    // Close shape visually if it's a finished papercut (not red preview)
+    if (col[0] !== 255) endShape(CLOSE); else endShape();
     
-    // Mirrored half for traditional papercut symmetry
     push();
     scale(1, -1);
     beginShape();
-    for (let p of points) vertex(p.x, p.y);
-    if (col[0] !== 255) endShape(CLOSE);
-    else endShape();
+    for (let p of points) { vertex(p.x, p.y); }
+    if (col[0] !== 255) endShape(CLOSE); else endShape();
     pop();
   }
 }
 
-function mouseReleased() {
+// --- Logic to handle Mouse Release / Touch End ---
+function handleAction() {
+  
+  // Case A: Drawing a shape (Lots of points)
   if (currentShape.length > 5) {
     let start = currentShape[0];
     let end = currentShape[currentShape.length - 1];
     
-    // A generous threshold for considering the shape "closed"
+    // Check if the shape is closed (Distance < 100)
     if (dist(start.x, start.y, end.x, end.y) < 100) {
       
-      // Snap the final point to the start to avoid visible gaps
-      currentShape.push(currentShape[0]);
+      currentShape.push(currentShape[0]); // Force close
 
       let papercutData = {
+        id: Date.now() + Math.random(), // [New] Generate Unique ID
         points: [...currentShape], 
         color: [random(255), 100, 100], 
         x: random(width * 0.1, width * 0.9), 
         y: random(height * 0.1, height * 0.9),
         rotation: random(360),
+        // Send initial animation params so everyone sees the same sync
         spinSpeed: random(-0.5, 0.5),
         floatOffset: random(360)
       };
       
-      // Send the new papercut to the shared wall
       if (socket) {
         socket.emit("newPapercut", papercutData);
       }
-
-      // Local optimistic update (immediate feedback)
+      
+      // We don't push to allShapes here anymore, 
+      // we wait for the server to send it back or handle history logic.
+      // But for instant feedback, we can push it:
       allShapes.push(papercutData); 
     }
+  } 
+  // Case B: Clicking to Delete (Very few points = Click)
+  else if (currentShape.length < 5) {
+      checkDelete();
   }
 
-  // Reset for the next cut
-  currentShape = []; 
+  currentShape = []; // Reset
+}
+
+// Check if we clicked on an existing papercut
+function checkDelete() {
+    // Loop backwards to delete the top-most one first
+    for (let i = allShapes.length - 1; i >= 0; i--) {
+        let s = allShapes[i];
+        
+        // Calculate the current position (including float animation)
+        let floatingY = sin(frameCount + s.floatOffset) * 10;
+        let actualY = s.y + floatingY;
+
+        // Simple hit detection: Distance to center < 50px
+        if (dist(mouseX, mouseY, s.x, actualY) < 50) {
+            // Send delete command to server
+            socket.emit("deletePapercut", s.id);
+            break; // Delete only one at a time
+        }
+    }
+}
+
+// Mouse Release
+function mouseReleased() {
+  handleAction();
+}
+
+// Touch controls for Mobile
+function touchStarted() { return false; }
+function touchMoved() { return false; }
+function touchEnded() { 
+  handleAction();
+  return false;
 }
 
 function windowResized() {
