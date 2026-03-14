@@ -104,7 +104,7 @@ function draw() {
   // Draw the red preview line
   drawSymmetry(currentShape, [255, 0, 0]); 
   
-  // Visual Hint: Green light when close to closing the shape
+  // Green light when close to closing the shape
   if (currentShape.length > 5) {
       let start = currentShape[0];
       let end = currentShape[currentShape.length - 1];
