@@ -10,7 +10,7 @@ This design aims to simulate the traditional act of "pasting window flowers," al
 ## 简介
 This project is inspired by the traditional Chinese folk custom of paper-cutting. In physical art, window flowers achieve complex symmetrical beauty through intricate folding and precise cutting. In a digital context, I aim to explore "low-threshold improvised creation"—transforming a tedious, high-skill craft into intuitive, gestural brushstrokes.
 ## Picture
-
+![Paper Cut Project](pic.png)
 ## References
 - https://en.wikipedia.org/wiki/Chinese_paper_cutting
 - 
